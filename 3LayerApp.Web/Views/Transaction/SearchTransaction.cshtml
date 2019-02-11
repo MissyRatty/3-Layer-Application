@@ -1,0 +1,476 @@
+﻿@*scripts here*@
+<script src="~/Scripts/jquery-3.2.1.min.js"></script>
+
+
+<script type="text/javascript">
+
+    //on Page Load
+    $(document).ready(function () {
+       
+        //add pop up cancel button is clicked
+        $("#addTransactionCancelBtn").click(function () {
+            //Reset Add Form here
+            ClearValErrs('Add');
+
+            //hide add pop up form
+            $("#addTransactionModal").modal("hide");
+        });
+    });
+
+    
+//Get All Transactions
+function getTransactionData() {
+
+        $.ajax({
+            url: '/Transaction/GetTransactions',
+            type: "GET",
+            data: null,
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (FilteredData) {
+                $('#appSearchGrid').DataTable({
+                    "data": FilteredData,
+                    "bDestroy": true,
+                    "sPaginationType": "full_numbers",
+                    "bStateSave": true,
+                    "fnCreatedRow": function (nRow, aData, iDataIndex) {
+                        $(nRow).attr('id', aData.TransactionId);
+                    },
+
+                    "columns": [
+
+                        { title: "ID", data: "TransactionId" },
+
+                        { title: "Account Number", data: "AccountNumber" },
+
+                        { title: "Balance", data: "Balance" },
+
+                        { title: "Type", data: "TransactionType" },
+
+                        { title: "Amount", data: "Amount" },
+                        {
+                            data: "TransactionId",
+                            "sWidth": "18%",
+                            bSortable: false,
+                            "bSearchable": false,
+                            render: function (p_Key) {
+                                return '<button onclick="deleteTrans(' + p_Key + ')" data-id=' + p_Key + '" id="delTrans"  class="btn btn-danger" data-toggle="modal" data-target="#deleteTransactionModal"><i class="fa fa-trash myIconFormat"></i> Delete</button>';
+
+                            }
+                        }
+
+                    ],
+                    select: true
+                });
+            },
+
+            error: function (msg) {
+                alert("Error");
+                console.log("ErrorMsgFromLoadGridData  " + msg);
+            }
+        });
+
+    }
+
+    //get selected Account Number from account Dropdown
+    var getSelectedTransAccNumberText = null;
+
+    //get selected Transaction Type from Type Dropdown
+    var getSelectedTransTypeText = null;
+
+
+    //set drop down values Account Numbers
+    function comboValueChangedAccNumber(txt, op) {
+
+        getSelectedTransAccNumberText = txt.toString();
+        var selectedTransAccNumber = getSelectedTransAccNumberText;
+
+        //adding OR editing
+        var currentOperation = op.toString();
+
+        //get the controls
+        newSelectedOptionChangeForAdd = document.getElementById("addAccNumberDrpdwn");
+        newSelectedOptionChangeForEdit = document.getElementById("editAccNumberDrpdwn");
+
+        switch (currentOperation) {
+            case 'Add':
+                newSelectedOptionChangeForAdd.value = selectedTransAccNumber.toString();
+                $("#addTransAccNumberList").css({ 'display': 'none' });
+
+                break;
+
+            case 'Edit':
+                newSelectedOptionChangeForEdit.value = selectedTransAccNumber.toString();
+                $("#editTransAccNumberList").css({ 'display': 'none' });
+        }
+    };
+
+    //set drop down values TransactionType
+    function comboValueChangedTransType(txt, op) {
+
+        getSelectedTransTypeText = txt.toString();
+        var selectedTransType = getSelectedTransTypeText;
+
+        //adding OR editing
+        var currentOperation = op.toString();
+        //get the controls
+        var newSelectedOptionChangeForAdd = document.getElementById("addTransTypeDrpdwn");
+        var newSelectedOptionChangeForEdit = document.getElementById("editTransTypeDrpdwn");
+
+        switch (currentOperation) {
+            case 'Add':
+                newSelectedOptionChangeForAdd.value = selectedTransType.toString();
+                $("#addTransTypeList").css({ 'display': 'none' });
+                break;
+
+            case 'Edit':
+                newSelectedOptionChangeForEdit.value = selectedTransType.toString();
+                $("#editTransTypeList").css({ 'display': 'none' });
+        }
+    };
+
+
+//-------  Saving Section --------------------------------------------------------
+    //Adding
+    //Show pop up form
+    function showAddTransactionPopup() {
+        
+        //clear validation errors and reset form controls
+        ClearValErrs('Add');
+
+        //show add popup
+        $('#addTransactionModal').modal();
+    };
+
+
+
+    //insert new Data
+    function saveTransactionData() {
+
+        //get accountNumber and Transaction Type
+        var addTransAccountNumberCombo = getSelectedTransAccNumberText;
+        var addTransTypeCombo = getSelectedTransTypeText;
+
+        var addAmount = $('#addAmountTxtbx').val();
+
+        var addTransaction =
+        {
+            AccountNumber: addTransAccountNumberCombo,
+            TransactionType: addTransTypeCombo,
+            Amount: addAmount
+        };
+
+        $.ajax({
+            url: '/Transaction/SaveTransaction',
+            type: "POST",
+            data: JSON.stringify(addTransaction),
+            contentType: "application/json; charset=utf-8",
+            cache: false,
+            success: function (data) {
+                data = JSON.parse(data);
+                console.log(data);
+
+                if (typeof data.success != undefined && data.success == true) {
+
+                    $('#appSearchGrid tbody').prepend(
+                        "<tr id=" + data.TransactionId + ">"
+                        + "<td>" + getSelectedTransAccNumberText + "</td>"
+                        + "<td>" + getSelectedTransTypeText + "</td>"
+                        + "<td>" + addTransaction.Amount + "</td>"
+                        + "<td>"
+                        + '<button onclick="deleteTrans(' + data.TransactionId + ')" id="delTrans"  class="btn btn-danger" data-toggle="modal" data-target="#deleteTransactionModal"><i class="fa fa-trash myIconFormat"></i> Delete</button>'
+                        + "</td>"
+                        + "</tr>"
+                    );
+
+                    ClearValErrs('Add');
+                    $("#addTransactionModal").modal("hide");
+
+                    $('#alertParagraph').text('Event Added Successfully');
+                    $('#infoTransactionModal').modal();
+                }
+
+                else {
+                    $("#AddTransactionErrorsContainer").css({ 'display': 'block' });
+                    $("#AddTransactionErrorsContainer .errors").html("");
+                    $.each(data.errors, function (index, value) {
+                        $("#AddTransactionErrorsContainer .errors").prepend("<li>" + value + "</li>");
+                    });
+                }
+
+            },
+            error: function (msg) {
+                alert(msg);
+            }
+        });
+
+    }
+
+   
+
+
+//-------------------- Deleting Section ------------------------------------------------
+
+    //get primary key for deleting
+    var delTransID = null;
+
+    //set the primary key for deleting
+    function deleteTrans(id) {
+        delTransID = id;
+    }
+
+
+    //method for when the delete button is clicked on the delete dialog popup
+    function ConfirmTransactionDelete() {
+        if (delTransID != null) {
+
+            var deleteTransRecord = {
+                TransactionId: delTransID
+            }
+
+            $.ajax({
+                url: '/Transaction/DeleteTransaction',
+                type: "POST",
+                data: JSON.stringify(deleteTransRecord),
+                contentType: "application/json; charset=utf-8",
+                cache: false,
+                success: function (response) {
+                    $('#appSearchGrid #' + delTransID).remove();
+                    $('#alertParagraph').text('Transaction Deleted Successfully');
+                    $('#infoTransactionModal').modal();
+
+                },
+                error: function (msg) {
+                    $('#alertParagraph').text('Delete Unsuccessful');
+                    $('#infoTransactionModal').modal();
+                }
+            });
+
+        }
+    }
+
+
+    // ------------------ Reset Page ----------------------------------------------------
+
+    //method for Reset Button
+    function clearTransactionContents() {
+        location.reload(true);
+    }
+
+
+
+
+// ------------------- Clear all Errors on Pop ups ----------------------------------------
+
+    //method to clear Validation Errors Container and Controls content
+    function ClearValErrs(OpType) {
+        OpType = OpType.toString();
+        switch (OpType) {
+            case 'Add':
+                $("#AddTransactionErrorsContainer").css("display", "none");
+                $("#AddTransactionErrorsContainer .errors").html("");
+                $("#addTransAccNumberList").css({ 'display': 'none' });
+                $("#addTransTypeList").css({ 'display': 'none' });
+
+                //clear text fields
+                //clear all text boxes
+                $('input:text').val('');
+                break;
+
+            case 'Edit':
+                $("#EditTransactionErrorsContainer").css("display", "none");
+                $("#EditTransactionErrorsContainer .errors").html("");
+                $("#editTransAccNumberList").css({ 'display': 'none' });
+                $("#editTransTypeList").css({ 'display': 'none' });
+                break;
+
+            default: return;
+                break;
+        }
+
+    }
+
+</script>
+
+
+
+@*design starts here*@
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+<div class="myspace"></div>
+
+@*Grid Here*@
+<div class="row">
+    <div class="panel panel-success">
+        <div class="panel-heading">
+            <div class="row">
+                <div class="col-md-4 col-sm-4 col-lg-4">
+                    <h4 class="panel-title">
+                        <span class="fa fa-filter" aria-hidden="true"></span> Search Transaction Results
+                    </h4>
+                </div>
+                <div class="col-md-7 col-sm-7 col-lg-7">
+                    <button id="addTransactionBtn" class="btn btn-success" data-toggle="modal" onclick="showAddTransactionPopup()">
+                        <i class="fa fa-plus myIconFormat"></i> New Transaction
+                    </button>
+
+                    <button id="loadTransactionBtn" onclick="getTransactionData()" class="btn btn-info">
+                        <i class="fa fa-database myIconFormat"></i> Load Transaction
+                    </button>
+
+                    <button id="resetTransactionBtn" onclick="clearTransactionContents()" class="btn btn-danger">
+                        <i class="fa fa-refresh myIconFormat"></i> Reset Grid
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+        <div class="panel-body">
+            <table class="table table-striped table-bordered table-hover table-responsive" style="width:100%" id="appSearchGrid">
+                <thead class="thin-border-bottom">
+                    <tr>
+                        <th>ID</th>
+                        <th>Account Number</th>
+                        <th>Balance</th>
+                        <th>Transaction Type</th>
+                        <th>Amount (£)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@*Save modal here*@
+<div class="modal fade" id="addTransactionModal" role="dialog">
+    <div class="modal-dialog modal-lg">
+        @*modal content here*@
+        <div class="modal-content">
+            @*modal header here*@
+            <div class="modal-header myModalHeader">
+                @*close button here*@
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                @*header title here*@
+                <h4 class="modal-title myTitleH4"><i class="fa fa-pencil"></i> Add New Transaction</h4>
+            </div>
+
+            @*body starts here*@
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div id="AddTransactionErrorsContainer"
+                             class="alert alert-warning alert-dismissible myErrContColor" role="alert" style="display:none">
+                            <strong class="errorFontColor">Validation Errors</strong>
+                            <ul class="errors errorFontColor"></ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 col-sm-4">
+                        <div class="form-group">
+                            <label for="addAccNumberDrpdwn"> Account Number:</label><br />
+                            <input class="form-control" type="text" id="addAccNumberDrpdwn"
+                                   placeholder="Select Account Number" title="Select Account Number" required />
+                            <ul class="list-group" id="addTransAccNumberList" style="display:none;">
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 col-sm-4">
+                        <div class="form-group">
+                            <label for="addTransTypeDrpdwn"> Transaction Type:</label><br />
+                            <input class="form-control" type="text" id="addTransTypeDrpdwn"
+                                   placeholder="Select Transaction Type" title="Select Transaction Type" required />
+                            <ul class="list-group" id="addTransTypeList" style="display:none;">
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 col-sm-4">
+                        <div class="form-group">
+                            <label for="addBalanceTxtbx">Balance:</label>
+                            <input type="number" class="form-control" id="addBalanceTxtbx"
+                                   placeholder="Account Balance here ...."  readonly/>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 col-sm-4">
+                        <div class="form-group">
+                            <label for="addAmountTxtbx">Amount:</label>
+                            <input type="number" class="form-control" id="addAmountTxtbx"
+                                   placeholder="Amount here ...." required />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @*@*show footer of Modal here*@
+            <div class="modal-footer">
+                @*add save and cancel buttons*@
+                <button id="addTransactionSaveBtn" type="button" class="btn btn-success" onclick="saveTransactionData()"><i class="fa fa-save myIconFormat"></i> Save</button>
+                <button id="addTransactionCancelBtn" type="button" class="btn btn-danger"><i class="fa fa-remove myIconFormat"></i> Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@*Successful modal here*@
+<div class="modal fade" id="infoTransactionModal" role="dialog">
+    <div class="modal-dialog modal-sm">
+        @*modal content here*@
+        <div class="modal-content">
+
+            @*body starts here*@
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-1 col-sm-1">
+
+                    </div>
+
+                    <div class="col-md-10 col-sm-10">
+                        <p id="alertParagraph" class="myLabelColor">
+
+                        </p>
+                    </div>
+
+                    <div class="col-md-1 col-sm-1">
+
+                    </div>
+                </div>
+
+
+            </div>
+
+            @*show footer of Modal here*@
+            <div class="modal-footer">
+                @*add yes and No buttons*@
+                <div class="row">
+                    <div class="col-md-1 col-sm-1">
+
+                    </div>
+                    <div class="col-md-8 col-sm-8">
+                        <button type="button" class="btn btn-warning myWidth" data-dismiss="modal">
+                            <i class="fa fa-info myIconFormat"></i> OK
+                        </button>
+                    </div>
+
+                    <div class="col-md-1 col-sm-1">
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>
